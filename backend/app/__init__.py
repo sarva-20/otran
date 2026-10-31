@@ -1,0 +1,1 @@
+"""Otran backend application."""

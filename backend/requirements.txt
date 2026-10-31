@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic>=2.10,<3
+pydantic-settings==2.7.1
+sqlalchemy>=2,<3
+httpx==0.28.1
+tenacity==9.0.0
+sse-starlette==2.2.1
+google-genai==1.2.0
+selectolax==0.3.28
+trafilatura==2.0.0
+pytest==8.3.4
+pytest-asyncio==0.25.3
+ruff==0.9.6
+python-dotenv==1.0.1

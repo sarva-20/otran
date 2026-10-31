@@ -1,0 +1,150 @@
+{
+  "_note": "Fictional products. Keys map to API responses. Frontend mock mode and backend tests both use this file.",
+
+  "health": { "status": "ok", "llm_provider": "gemini", "llm_model": "gemini-2.5-flash" },
+
+  "analysis": {
+    "id": "an_001",
+    "status": "completed",
+    "run_number": 2,
+    "created_at": "2026-10-31T10:00:00Z",
+    "completed_at": "2026-10-31T10:04:12Z",
+    "products": [
+      { "id": "p_our", "name": "Acme Notes", "role": "ours", "url": "https://acmenotes.example.com" },
+      { "id": "p_riv", "name": "Rivalo", "role": "competitor", "url": "https://rivalo.example.com" },
+      { "id": "p_nim", "name": "Nimbus Docs", "role": "competitor", "url": "https://nimbusdocs.example.com" }
+    ],
+    "dimensions": ["pricing", "features", "release_cadence"],
+    "stats": {
+      "sources_collected": 9,
+      "claims_total": 24,
+      "claims_verified": 21,
+      "claims_contradicted": 1,
+      "changes_detected": 2
+    }
+  },
+
+  "events": [
+    { "id": 1, "ts": "2026-10-31T10:00:01Z", "agent": "orchestrator", "step": "plan", "level": "info", "message": "Planned run: 3 products, 3 dimensions", "product_id": null, "data": {} },
+    { "id": 2, "ts": "2026-10-31T10:00:04Z", "agent": "discovery", "step": "find_sources", "level": "success", "message": "Found pricing, docs, changelog for Rivalo", "product_id": "p_riv", "data": { "count": 3 } },
+    { "id": 3, "ts": "2026-10-31T10:00:12Z", "agent": "collector", "step": "fetch_page", "level": "success", "message": "Fetched https://rivalo.example.com/pricing", "product_id": "p_riv", "data": { "url": "https://rivalo.example.com/pricing", "snapshot_id": "s_101" } },
+    { "id": 4, "ts": "2026-10-31T10:00:40Z", "agent": "collector", "step": "fetch_page", "level": "warning", "message": "Nimbus changelog slow, retrying (1/2)", "product_id": "p_nim", "data": {} },
+    { "id": 5, "ts": "2026-10-31T10:01:20Z", "agent": "extractor", "step": "extract_pricing", "level": "success", "message": "Extracted 4 pricing claims for Rivalo", "product_id": "p_riv", "data": { "count": 4 } },
+    { "id": 6, "ts": "2026-10-31T10:02:05Z", "agent": "verifier", "step": "verify_claim", "level": "warning", "message": "Claim c_007 contradicted by second source", "product_id": "p_nim", "data": { "claim_id": "c_007" } },
+    { "id": 7, "ts": "2026-10-31T10:03:10Z", "agent": "diff", "step": "compare_snapshots", "level": "success", "message": "2 changes detected vs run 1", "product_id": null, "data": { "count": 2 } },
+    { "id": 8, "ts": "2026-10-31T10:04:12Z", "agent": "analyst", "step": "build_report", "level": "success", "message": "Matrix and report ready", "product_id": null, "data": {} }
+  ],
+
+  "matrix": {
+    "analysis_id": "an_001",
+    "products": [
+      { "id": "p_our", "name": "Acme Notes", "role": "ours", "url": "https://acmenotes.example.com" },
+      { "id": "p_riv", "name": "Rivalo", "role": "competitor", "url": "https://rivalo.example.com" },
+      { "id": "p_nim", "name": "Nimbus Docs", "role": "competitor", "url": "https://nimbusdocs.example.com" }
+    ],
+    "dimensions": ["pricing", "features", "release_cadence"],
+    "cells": [
+      { "product_id": "p_our", "dimension": "pricing", "value": "Pro $10/user/mo", "verification_status": "verified", "confidence": 0.95, "claim_ids": ["c_001"], "advantage": "parity" },
+      { "product_id": "p_riv", "dimension": "pricing", "value": "Pro $8/user/mo (was $12)", "verification_status": "verified", "confidence": 0.93, "claim_ids": ["c_002"], "advantage": "theirs" },
+      { "product_id": "p_nim", "dimension": "pricing", "value": "Team $9/user/mo", "verification_status": "contradicted", "confidence": 0.4, "claim_ids": ["c_007"], "advantage": "unknown" },
+      { "product_id": "p_our", "dimension": "features", "value": "Offline mode, AI search, SSO", "verification_status": "verified", "confidence": 0.9, "claim_ids": ["c_003"], "advantage": "ours" },
+      { "product_id": "p_riv", "dimension": "features", "value": "AI search, SSO", "verification_status": "verified", "confidence": 0.88, "claim_ids": ["c_004"], "advantage": "ours" },
+      { "product_id": "p_nim", "dimension": "features", "value": "Real-time collab, AI search", "verification_status": "unverified", "confidence": 0.6, "claim_ids": ["c_008"], "advantage": "unknown" },
+      { "product_id": "p_our", "dimension": "release_cadence", "value": "Monthly", "verification_status": "verified", "confidence": 0.9, "claim_ids": ["c_005"], "advantage": "parity" },
+      { "product_id": "p_riv", "dimension": "release_cadence", "value": "Biweekly", "verification_status": "verified", "confidence": 0.9, "claim_ids": ["c_006"], "advantage": "theirs" },
+      { "product_id": "p_nim", "dimension": "release_cadence", "value": "No public changelog found", "verification_status": "missing", "confidence": 0, "claim_ids": [], "advantage": "unknown" }
+    ]
+  },
+
+  "claim": {
+    "id": "c_002",
+    "product_id": "p_riv",
+    "dimension": "pricing",
+    "statement": "Rivalo Pro plan costs $8 per user per month, billed annually.",
+    "data": { "tier": "Pro", "price": 8, "currency": "USD", "period": "user/month", "billing": "annual" },
+    "evidence": [
+      {
+        "id": "e_002a",
+        "quote": "Pro - $8 per user / month, billed annually",
+        "source_url": "https://rivalo.example.com/pricing",
+        "source_type": "pricing",
+        "snapshot_id": "s_101",
+        "char_start": 412,
+        "char_end": 454,
+        "captured_at": "2026-10-31T10:00:12Z"
+      }
+    ],
+    "verification": { "status": "verified", "confidence": 0.93, "reason": "Quote found verbatim in snapshot; consistent with changelog entry." },
+    "first_seen_at": "2026-10-24T09:00:00Z",
+    "last_seen_at": "2026-10-31T10:00:12Z"
+  },
+
+  "snapshot": {
+    "id": "s_101",
+    "url": "https://rivalo.example.com/pricing",
+    "source_type": "pricing",
+    "captured_at": "2026-10-31T10:00:12Z",
+    "content_hash": "sha256:9f2c1ab07e",
+    "text": "Rivalo Pricing\nFree - $0 for up to 3 users\nPro - $8 per user / month, billed annually\nBusiness - $20 per user / month, SSO and audit logs\nEnterprise - Contact sales"
+  },
+
+  "changes": [
+    {
+      "id": "ch_001",
+      "product_id": "p_riv",
+      "dimension": "pricing",
+      "change_type": "modified",
+      "severity": "high",
+      "summary": "Rivalo cut Pro plan price from $12 to $8 per user/month.",
+      "before": "Pro - $12 per user / month",
+      "after": "Pro - $8 per user / month",
+      "source_url": "https://rivalo.example.com/pricing",
+      "detected_at": "2026-10-31T10:03:10Z",
+      "claim_ids": ["c_002"]
+    },
+    {
+      "id": "ch_002",
+      "product_id": "p_riv",
+      "dimension": "features",
+      "change_type": "added",
+      "severity": "medium",
+      "summary": "Rivalo release notes add 'AI meeting summaries' in v4.3.",
+      "before": null,
+      "after": "AI meeting summaries now available on Business plans",
+      "source_url": "https://rivalo.example.com/changelog",
+      "detected_at": "2026-10-31T10:03:11Z",
+      "claim_ids": ["c_004"]
+    }
+  ],
+
+  "report": {
+    "analysis_id": "an_001",
+    "generated_at": "2026-10-31T10:04:12Z",
+    "executive_summary": "Rivalo undercut our Pro pricing by 20% this week and ships faster. We lead on offline mode, which no competitor offers. Nimbus data is incomplete: one pricing claim is contradicted.",
+    "gaps": [
+      { "dimension": "pricing", "description": "Rivalo Pro is $2 cheaper per user per month than ours.", "severity": "high", "claim_ids": ["c_001", "c_002"] },
+      { "dimension": "release_cadence", "description": "Rivalo ships biweekly vs our monthly.", "severity": "medium", "claim_ids": ["c_005", "c_006"] }
+    ],
+    "battlecards": [
+      {
+        "competitor_id": "p_riv",
+        "strengths": ["Lower Pro price", "Faster release cadence"],
+        "weaknesses": ["No offline mode"],
+        "counter_points": ["Lead with offline reliability for field teams"],
+        "claim_ids": ["c_002", "c_004", "c_006"]
+      }
+    ],
+    "markdown": "# Competitive Report\n\n## Summary\nRivalo cut Pro pricing to $8 [claim:c_002]. We lead on offline mode [claim:c_003].\n"
+  },
+
+  "chat_request": { "question": "Who undercut our pricing recently?", "history": [] },
+
+  "chat_response": {
+    "answer": "Rivalo lowered its Pro plan from $12 to $8 per user per month, undercutting our $10 Pro plan.",
+    "citations": [
+      { "claim_id": "c_002", "quote": "Pro - $8 per user / month, billed annually", "source_url": "https://rivalo.example.com/pricing" },
+      { "claim_id": "c_001", "quote": "Pro $10 per user per month", "source_url": "https://acmenotes.example.com/pricing" }
+    ],
+    "insufficient_evidence": false
+  }
+}

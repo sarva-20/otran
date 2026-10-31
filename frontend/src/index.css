@@ -1,0 +1,59 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens (HSL triplets). Light follows the shared reference: warm off-white,
+   ink-black pill buttons, one saturated blue accent. Swap --accent to re-brand
+   (e.g. saffron: 38 95% 50%). Green/amber/red are reserved for verification + severity. */
+@layer base {
+  :root {
+    --background: 60 8% 96%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --muted: 60 6% 92%;
+    --muted-foreground: 0 0% 40%;
+    --border: 40 6% 87%;
+    --input: 40 6% 87%;
+    --ring: 217 91% 42%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 217 91% 42%;
+    --accent-foreground: 0 0% 100%;
+    --success: 152 60% 32%;
+    --success-soft: 152 55% 94%;
+    --warning: 32 90% 40%;
+    --warning-soft: 40 90% 92%;
+    --danger: 0 70% 46%;
+    --danger-soft: 0 80% 95%;
+    --radius: 0.625rem;
+  }
+  .dark {
+    --background: 222 22% 6%;
+    --foreground: 40 10% 94%;
+    --card: 222 18% 9%;
+    --card-foreground: 40 10% 94%;
+    --muted: 222 14% 14%;
+    --muted-foreground: 220 8% 62%;
+    --border: 222 12% 18%;
+    --input: 222 12% 18%;
+    --ring: 217 91% 62%;
+    --primary: 40 10% 94%;
+    --primary-foreground: 222 22% 6%;
+    --accent: 217 91% 62%;
+    --accent-foreground: 222 22% 6%;
+    --success: 152 55% 52%;
+    --success-soft: 152 40% 14%;
+    --warning: 38 92% 56%;
+    --warning-soft: 38 50% 14%;
+    --danger: 0 80% 66%;
+    --danger-soft: 0 45% 15%;
+  }
+  * { @apply border-border; }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}

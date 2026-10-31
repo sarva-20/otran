@@ -1,8 +1,10 @@
 import hashlib
 import json
+import re
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -118,9 +120,9 @@ class Analyst:
         report = Report(
             analysis_id=analysis_id,
             generated_at=datetime.now(timezone.utc),
-            executive_summary=draft.executive_summary[:1200],
-            gaps=_filter_gaps(draft.gaps, valid_ids),
-            battlecards=_filter_battlecards(draft.battlecards, valid_ids),
+            executive_summary=_normalise_currency_text(draft.executive_summary[:1200]),
+            gaps=_normalise_report_text(_filter_gaps(draft.gaps, valid_ids)),
+            battlecards=_normalise_report_text(_filter_battlecards(draft.battlecards, valid_ids)),
             markdown="",
         )
         report.markdown = _render_markdown(report)
@@ -209,6 +211,8 @@ def _cell_confidence(claims: Sequence[ClaimTable]) -> float:
 def _cell_value(claims: Sequence[ClaimTable]) -> str:
     if not claims:
         return "No public data found"
+    if _cell_status(claims) == "contradicted":
+        return _conflict_value(claims)
     usable = [claim for claim in claims if claim.verification.get("status") == "verified"] or list(claims)
     dimension = usable[0].dimension
     if dimension == "pricing":
@@ -227,7 +231,47 @@ def _pricing_value(claim: ClaimTable) -> str:
     if price is None:
         return claim.statement
     period = str(data.get("period", "user/month")).replace(" ", "/")
-    return f"{tier} ${price}/{period}"
+    return f"{tier} ${_format_price(price)}/{period}"
+
+
+def _format_price(price: int | float | Decimal) -> str:
+    value = Decimal(str(price))
+    return f"{value:.0f}" if value == value.to_integral() else f"{value:.2f}"
+
+
+def _normalise_currency_text(text: str) -> str:
+    return re.sub(
+        r"\$(\d+(?:\.\d+)?)",
+        lambda match: f"${_format_price(Decimal(match.group(1)))}",
+        text,
+    )
+
+
+def _normalise_report_text(items: Sequence[Gap | Battlecard]) -> list[Gap | Battlecard]:
+    return [
+        item.model_copy(
+            update={
+                field: [
+                    _normalise_currency_text(value)
+                    for value in getattr(item, field)
+                ]
+                if isinstance(getattr(item, field), list)
+                else _normalise_currency_text(getattr(item, field))
+                for field in ("description", "strengths", "weaknesses", "counter_points")
+                if hasattr(item, field)
+            }
+        )
+        for item in items
+    ]
+
+
+def _conflict_value(claims: Sequence[ClaimTable]) -> str:
+    values = []
+    for claim in claims:
+        value = _pricing_value(claim) if claim.dimension == "pricing" else claim.statement
+        if value not in values:
+            values.append(value)
+    return f"{' vs '.join(values[:2])} - sources disagree"[:120]
 
 
 def _cadence(claims: Sequence[ClaimTable]) -> str:

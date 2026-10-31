@@ -71,7 +71,7 @@ class Collector:
             result = await self.fetcher.fetch(url)
             html, final_url = result.html, result.final_url
         text = clean_html(html)
-        if len(text) < 500:
+        if len(text) < 500 and not settings.OFFLINE_DEMO and isinstance(self.fetcher, Fetcher):
             fallback_html = await self._playwright_html(final_url)
             if fallback_html:
                 text = clean_html(fallback_html)

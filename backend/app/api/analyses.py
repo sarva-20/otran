@@ -15,6 +15,7 @@ from app.db import SessionLocal, get_db
 from app.models.schemas import (
     Analysis,
     AnalysisCreate,
+    AnalysisStats,
     AgentEvent,
     Change,
     ChatRequest,
@@ -39,7 +40,7 @@ def _analysis(row: AnalysisTable) -> Analysis:
         completed_at=row.completed_at,
         products=[Product(id=p.id, name=p.name, role=p.role, url=p.url) for p in row.products],
         dimensions=row.dimensions,
-        stats=row.stats,
+        stats=row.stats or AnalysisStats(),
     )
 
 

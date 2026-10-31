@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.agents.analyst import Analyst
+from app.agents.analyst import Analyst, _format_price, _normalise_currency_text
 from app.db import Base
 from app.models.schemas import Analysis, Claim, Evidence, Product, Snapshot, Verification
 from app.models.tables import ReportTable
@@ -94,10 +94,13 @@ async def test_matrix_formats_values_statuses_missing_and_advantage(db: Session)
     _save(db, "s_a", "c_rival_feature", "rival", "features", "Offline mode", None, "verified", 0.8)
     matrix = Analyst(db).build_matrix("an_a")
     rival_price = next(cell for cell in matrix.cells if cell.product_id == "rival" and cell.dimension == "pricing")
-    assert rival_price.value == "Pro $8/user/month"
+    assert rival_price.value == "Pro $9/user/month vs Pro $8/user/month - sources disagree"
     assert rival_price.verification_status == "contradicted"
     assert rival_price.confidence == 0.3
     assert rival_price.advantage == "theirs"
+    assert _format_price(10.0) == "10"
+    assert _format_price(12.5) == "12.50"
+    assert _normalise_currency_text("Pro is $10.0; Team is $12.5") == "Pro is $10; Team is $12.50"
     missing = next(cell for cell in matrix.cells if cell.product_id == "ours" and cell.dimension == "limits")
     assert missing.value == "No public data found"
     assert missing.verification_status == "missing"

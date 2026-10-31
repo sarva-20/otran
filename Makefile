@@ -3,7 +3,7 @@ install:
 	. .venv/bin/activate && python -m pip install -r backend/requirements.txt
 
 run:
-	. .venv/bin/activate && uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+	set -a; [ ! -f backend/.env ] || . backend/.env; set +a; . .venv/bin/activate && uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
 
 test:
 	. .venv/bin/activate && pytest backend/tests -q

@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
 import yaml
@@ -6,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models.schemas import AnalysisStats, Battlecard, Change, ChatRequest, Gap
+from app.api.analyses import _analysis
+from app.models.tables import AnalysisTable
 
 
 ROOT = Path(__file__).parents[2]
@@ -148,3 +151,15 @@ def test_localhost_ports_are_allowed_by_cors() -> None:
         )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
+
+
+def test_analysis_response_defaults_missing_stats() -> None:
+    row = AnalysisTable(
+        id="an_test",
+        status="queued",
+        run_number=1,
+        created_at=datetime.now(timezone.utc),
+        products=[],
+        dimensions=[],
+    )
+    assert _analysis(row).stats == AnalysisStats()

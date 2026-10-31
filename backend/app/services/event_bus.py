@@ -2,9 +2,21 @@ import asyncio
 from collections import defaultdict
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class AgentName(str, Enum):
+    orchestrator = "orchestrator"
+    discovery = "discovery"
+    collector = "collector"
+    extractor = "extractor"
+    verifier = "verifier"
+    diff = "diff"
+    analyst = "analyst"
+    qa = "qa"
 
 
 class AgentEvent(BaseModel):
@@ -12,11 +24,8 @@ class AgentEvent(BaseModel):
 
     id: int
     ts: datetime
-    agent: Literal[
-        "orchestrator", "discovery", "collector", "extractor",
-        "verifier", "diff", "analyst", "qa",
-    ]
-    step: str | None = None
+    agent: AgentName
+    step: str = ""
     level: Literal["info", "success", "warning", "error"]
     message: str
     product_id: str | None = None

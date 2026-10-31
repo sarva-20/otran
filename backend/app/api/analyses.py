@@ -4,9 +4,8 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,21 +15,19 @@ from app.db import SessionLocal, get_db
 from app.models.schemas import (
     Analysis,
     AnalysisCreate,
+    AgentEvent,
     Change,
     ChatRequest,
     ChatResponse,
     Matrix,
     Product,
+    Error,
     Report,
 )
 from app.models.tables import AnalysisTable, ChangeTable, EventTable, ProductTable, ReportTable
 from app.services.event_bus import event_bus
 
 router = APIRouter()
-
-
-class ErrorResponse(BaseModel):
-    detail: str
 
 
 def _analysis(row: AnalysisTable) -> Analysis:
@@ -95,16 +92,20 @@ def list_analyses(db: Session = Depends(get_db)) -> list[Analysis]:
     return [_analysis(row) for row in db.scalars(select(AnalysisTable).order_by(AnalysisTable.created_at.desc()))]
 
 
-@router.get("/api/analyses/{analysis_id}", response_model=Analysis)
-def get_analysis(analysis_id: str, db: Session = Depends(get_db)) -> Analysis:
+@router.get("/api/analyses/{analysisId}", response_model=Analysis, responses={404: {"model": Error}})
+def get_analysis(analysis_id: str = Path(..., alias="analysisId"), db: Session = Depends(get_db)) -> Analysis:
     row = db.get(AnalysisTable, analysis_id)
     if row is None:
         raise _not_found("Analysis not found")
     return _analysis(row)
 
 
-@router.get("/api/analyses/{analysis_id}/events")
-async def events(analysis_id: str, db: Session = Depends(get_db)) -> StreamingResponse:
+@router.get(
+    "/api/analyses/{analysisId}/events",
+    response_model=AgentEvent,
+    responses={404: {"model": Error}},
+)
+async def events(analysis_id: str = Path(..., alias="analysisId"), db: Session = Depends(get_db)) -> StreamingResponse:
     if db.get(AnalysisTable, analysis_id) is None:
         raise _not_found("Analysis not found")
     history = list(
@@ -146,17 +147,17 @@ def _event_data(row: EventTable) -> dict[str, object]:
     }
 
 
-@router.get("/api/analyses/{analysis_id}/matrix", response_model=Matrix)
-def matrix(analysis_id: str, db: Session = Depends(get_db)) -> Matrix:
+@router.get("/api/analyses/{analysisId}/matrix", response_model=Matrix, responses={404: {"model": Error}})
+def matrix(analysis_id: str = Path(..., alias="analysisId"), db: Session = Depends(get_db)) -> Matrix:
     _require_analysis(db, analysis_id)
     from app.agents.analyst import Analyst
 
     return Analyst(db).build_matrix(analysis_id)
 
 
-@router.get("/api/analyses/{analysis_id}/changes", response_model=list[Change])
+@router.get("/api/analyses/{analysisId}/changes", response_model=list[Change], responses={404: {"model": Error}})
 def changes(
-    analysis_id: str,
+    analysis_id: str = Path(..., alias="analysisId"),
     product_id: str | None = None,
     severity: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -170,8 +171,12 @@ def changes(
     return [Change.model_validate(row, from_attributes=True) for row in db.scalars(statement.order_by(ChangeTable.detected_at.desc()))]
 
 
-@router.post("/api/analyses/{analysis_id}/rerun", response_model=Analysis, status_code=202)
-def rerun(analysis_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Analysis:
+@router.post("/api/analyses/{analysisId}/rerun", response_model=Analysis, status_code=202, responses={404: {"model": Error}})
+def rerun(
+    background_tasks: BackgroundTasks,
+    analysis_id: str = Path(..., alias="analysisId"),
+    db: Session = Depends(get_db),
+) -> Analysis:
     row = _require_analysis(db, analysis_id)
     row.status = "queued"
     db.add(row)
@@ -180,9 +185,9 @@ def rerun(analysis_id: str, background_tasks: BackgroundTasks, db: Session = Dep
     return _analysis(row)
 
 
-@router.get("/api/analyses/{analysis_id}/report", response_model=None)
+@router.get("/api/analyses/{analysisId}/report", response_model=Report, responses={404: {"model": Error}})
 def report(
-    analysis_id: str,
+    analysis_id: str = Path(..., alias="analysisId"),
     format: str = Query(default="json", pattern="^(json|md)$"),
     db: Session = Depends(get_db),
 ) -> Report | PlainTextResponse:
@@ -201,8 +206,8 @@ def report(
     return PlainTextResponse(result.markdown, media_type="text/markdown") if format == "md" else result
 
 
-@router.post("/api/analyses/{analysis_id}/chat", response_model=ChatResponse)
-async def chat(analysis_id: str, payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+@router.post("/api/analyses/{analysisId}/chat", response_model=ChatResponse, responses={404: {"model": Error}})
+async def chat(payload: ChatRequest, analysis_id: str = Path(..., alias="analysisId"), db: Session = Depends(get_db)) -> ChatResponse:
     _require_analysis(db, analysis_id)
     return await answer_question(db, analysis_id, payload.question, payload.history)
 

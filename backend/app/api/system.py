@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Literal
 
 from app.llm.router import LLMRouter
 
@@ -9,8 +10,8 @@ llm_router = LLMRouter()
 
 class Health(BaseModel):
     status: str
-    llm_provider: str
-    llm_model: str
+    llm_provider: Literal["gemini", "ollama"]
+    llm_model: str = ""
 
 
 @router.get("/health", response_model=Health)

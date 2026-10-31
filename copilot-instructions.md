@@ -63,3 +63,4 @@ backend/
 ## Workflow
 We build module by module: M0 scaffold, M1 schemas, M2 discovery+collector, M3 extractor, M4 verifier, M5 diff, M6 analyst/report, M7 orchestrator+API+SSE, M8 Q&A, M9 demo seed.
 For each module: (1) state a short plan, (2) implement, (3) add tests, (4) run tests and lint, (5) show a brief summary of what changed and how to run it. Do not start the next module until asked.
+

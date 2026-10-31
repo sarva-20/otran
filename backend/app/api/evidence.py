@@ -1,16 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session, joinedload
-from fastapi import Depends
 
 from app.db import get_db
-from app.models.schemas import Claim, Evidence, Snapshot, Verification
+from app.models.schemas import Claim, Error, Evidence, Snapshot, Verification
 from app.models.tables import ClaimTable, SnapshotTable
 
 router = APIRouter()
 
 
-@router.get("/api/claims/{claim_id}", response_model=Claim)
-def get_claim(claim_id: str, db: Session = Depends(get_db)) -> Claim:
+@router.get("/api/claims/{claimId}", response_model=Claim, responses={404: {"model": Error}})
+def get_claim(claim_id: str = Path(..., alias="claimId"), db: Session = Depends(get_db)) -> Claim:
     row = db.query(ClaimTable).options(joinedload(ClaimTable.evidence)).filter_by(id=claim_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -27,8 +26,8 @@ def get_claim(claim_id: str, db: Session = Depends(get_db)) -> Claim:
     )
 
 
-@router.get("/api/snapshots/{snapshot_id}", response_model=Snapshot)
-def get_snapshot(snapshot_id: str, db: Session = Depends(get_db)) -> Snapshot:
+@router.get("/api/snapshots/{snapshotId}", response_model=Snapshot, responses={404: {"model": Error}})
+def get_snapshot(snapshot_id: str = Path(..., alias="snapshotId"), db: Session = Depends(get_db)) -> Snapshot:
     row = db.get(SnapshotTable, snapshot_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Snapshot not found")

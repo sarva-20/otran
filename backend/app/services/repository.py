@@ -14,6 +14,7 @@ from app.models.tables import (
     DiffCacheTable,
     ReportCacheTable,
     ReportTable,
+    QACacheTable,
 )
 
 
@@ -226,3 +227,24 @@ def replace_report(db: Session, analysis_id: str, report: Report) -> ReportTable
     db.commit()
     db.refresh(row)
     return row
+
+
+def get_qa_cache(db: Session, cache_key: str, prompt_version: str) -> dict[str, object] | None:
+    row = db.get(QACacheTable, f"{prompt_version}:{cache_key}")
+    return row.result if row is not None else None
+
+
+def save_qa_cache(
+    db: Session,
+    cache_key: str,
+    prompt_version: str,
+    result: dict[str, object],
+) -> None:
+    db.merge(
+        QACacheTable(
+            cache_key=f"{prompt_version}:{cache_key}",
+            prompt_version=prompt_version,
+            result=result,
+        )
+    )
+    db.commit()

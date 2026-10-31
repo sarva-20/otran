@@ -170,6 +170,14 @@ class ReportCacheTable(Base):
     result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class QACacheTable(Base):
+    __tablename__ = "qa_cache"
+
+    cache_key: Mapped[str] = mapped_column(String, primary_key=True)
+    prompt_version: Mapped[str] = mapped_column(String, nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 __all__ = [
     "AnalysisTable",
     "ProductTable",
@@ -183,4 +191,5 @@ __all__ = [
     "VerificationCacheTable",
     "DiffCacheTable",
     "ReportCacheTable",
+    "QACacheTable",
 ]

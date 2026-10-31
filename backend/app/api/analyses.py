@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.orchestrator import run_analysis
+from app.agents.qa import answer as answer_question
 from app.db import SessionLocal, get_db
 from app.models.schemas import (
     Analysis,
@@ -201,9 +202,9 @@ def report(
 
 
 @router.post("/api/analyses/{analysis_id}/chat", response_model=ChatResponse)
-def chat(analysis_id: str, payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+async def chat(analysis_id: str, payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     _require_analysis(db, analysis_id)
-    return ChatResponse(answer="Insufficient evidence.", citations=[], insufficient_evidence=True)
+    return await answer_question(db, analysis_id, payload.question, payload.history)
 
 
 def _require_analysis(db: Session, analysis_id: str) -> AnalysisTable:

@@ -7,7 +7,9 @@ from app.api.system import router as system_router
 from app.api.analyses import router as analyses_router
 from app.api.evidence import router as evidence_router
 from app.config import settings
-from app.db import init_db
+from app.db import SessionLocal, init_db
+from app.services.cache_io import import_llm_cache
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,3 +32,6 @@ app.include_router(evidence_router)
 @app.on_event("startup")
 async def startup() -> None:
     init_db()
+    if settings.OFFLINE_DEMO:
+        with SessionLocal() as db:
+            import_llm_cache(db, Path(__file__).parents[1] / "data" / "seed" / "llm_cache.json")

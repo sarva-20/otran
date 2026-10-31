@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Loader2, RefreshCw, XCircle } from 'lucide-react'
 import type { AgentEvent, Analysis, AnalysisStatus } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { getAgentConfig } from '@/lib/colors'
 import { cn } from '@/lib/utils'
 
@@ -9,6 +10,8 @@ interface ProgressHeaderProps {
   analysis: Analysis
   latestEvent?: AgentEvent
   isRunning?: boolean
+  onRerun?: () => void
+  isRerunning?: boolean
   className?: string
 }
 
@@ -78,6 +81,8 @@ export function ProgressHeader({
   analysis,
   latestEvent,
   isRunning = false,
+  onRerun,
+  isRerunning = false,
   className,
 }: ProgressHeaderProps) {
   const ourProduct = analysis.products.find((p) => p.role === 'ours')
@@ -120,6 +125,24 @@ export function ProgressHeader({
             </div>
           )}
           <StatusChip status={analysis.status} />
+          {onRerun && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRerun}
+              disabled={isRunning || isRerunning}
+              className="h-7 px-2.5 text-xs gap-1.5"
+              title="Rerun analysis"
+            >
+              {isRerunning ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              <span>Rerun</span>
+            </Button>
+          )}
         </div>
       </div>
 

@@ -1,15 +1,21 @@
 import * as React from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { AlertCircle, ArrowLeft, FileQuestion, RefreshCw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
+import { ApiError } from '@/api/client'
 import { AgentTrace } from '@/components/AgentTrace'
+import { ChangeTimeline } from '@/components/ChangeTimeline'
+import { ChatPanel } from '@/components/ChatPanel'
 import { MatrixTable } from '@/components/MatrixTable'
 import { ProgressHeader } from '@/components/ProgressHeader'
+import { ReportView } from '@/components/ReportView'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAnalysis } from '@/hooks/useAnalyses'
+import { useChat } from '@/hooks/useChat'
 import { useEventStream } from '@/hooks/useEventStream'
 import { useEvidenceDrawer } from '@/hooks/useEvidenceDrawer'
 import { useMatrix } from '@/hooks/useMatrix'
+import { useRerun } from '@/hooks/useRerun'
 import { cn } from '@/lib/utils'
 
 type TabKey = 'live' | 'matrix' | 'changes' | 'report' | 'chat'
@@ -86,7 +92,21 @@ export function Analysis() {
   }, [])
 
   // Event stream subscription
-  const { events, status, retrying, retry } = useEventStream(id, data?.status)
+  const { events, status, retrying, retry, reset: resetStream } = useEventStream(id, data?.status)
+
+  // Chat conversation state (persists across tab switches, clears on rerun)
+  const chat = useChat(id)
+
+  // Auto-switch to Live on rerun success
+  const handleRerunSuccess = React.useCallback(() => {
+    resetStream()
+    chat.clearMessages()
+    hasAutoSwitchedRef.current = false
+    switchTab('live')
+  }, [resetStream, chat, switchTab])
+
+  // Rerun mutation for ProgressHeader
+  const headerRerun = useRerun(id, handleRerunSuccess)
 
   // Matrix query & evidence drawer
   const {
@@ -151,13 +171,51 @@ export function Analysis() {
   }
 
   if (isError || !data) {
+    const isNotFound =
+      (error instanceof ApiError && error.status === 404) ||
+      error?.message?.toLowerCase().includes('not found')
+
+    if (isNotFound) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto space-y-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <FileQuestion className="h-6 w-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Analysis Not Found</h1>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              No analysis exists with ID <span className="font-mono font-medium text-foreground">{id}</span>. It may have been deleted or the link might be incorrect.
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5 pt-2">
+            <Link to="/">
+              <Button size="sm">
+                Back to Analyses
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )
+    }
+
     return (
-      <div className="rounded-2xl border border-danger/30 bg-danger-soft p-6 text-sm text-danger">
-        <p className="font-semibold">Failed to load analysis.</p>
-        <p className="mt-1 text-xs">{error?.message || 'Analysis record not found'}</p>
-        <div className="mt-4 flex gap-3">
-          <Button size="sm" variant="outline" onClick={() => void refetch()} className="border-danger/30 text-danger hover:bg-danger/10">
-            Retry
+      <div className="rounded-2xl border border-danger/30 bg-danger-soft p-6 text-sm text-danger max-w-xl mx-auto space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <p className="font-semibold">Cannot reach the API or load analysis.</p>
+        </div>
+        <p className="text-xs text-foreground/80 leading-relaxed">
+          {error?.message || 'The server could not be reached. Verify that the backend is running and CORS is configured.'}
+        </p>
+        <div className="flex items-center gap-3 pt-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void refetch()}
+            className="gap-2 border-danger/30 text-danger hover:bg-danger/10"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Retry</span>
           </Button>
           <Link to="/">
             <Button size="sm" variant="ghost">
@@ -189,6 +247,8 @@ export function Analysis() {
         analysis={data}
         latestEvent={events[events.length - 1]}
         isRunning={isLive}
+        onRerun={() => headerRerun.mutate()}
+        isRerunning={headerRerun.isPending}
       />
 
       {/* Tab Navigation */}
@@ -275,18 +335,54 @@ export function Analysis() {
           </div>
         )}
 
-        {activeTab !== 'live' && activeTab !== 'matrix' && (
+        {activeTab === 'changes' && (
           <div
-            id={`panel-${activeTab}`}
+            id="panel-changes"
             role="tabpanel"
-            aria-labelledby={`tab-${activeTab}`}
+            aria-labelledby="tab-changes"
             tabIndex={0}
-            className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/60 p-16 text-center focus-visible:outline-none"
+            className="focus-visible:outline-none"
           >
-            <h3 className="text-sm font-medium text-foreground">
-              {TABS.find((t) => t.key === activeTab)?.label} View
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">Coming in F4+</p>
+            <ChangeTimeline
+              analysis={data}
+              onOpenClaim={openClaim}
+              onRerunSuccess={handleRerunSuccess}
+            />
+          </div>
+        )}
+
+        {activeTab === 'report' && (
+          <div
+            id="panel-report"
+            role="tabpanel"
+            aria-labelledby="tab-report"
+            tabIndex={0}
+            className="focus-visible:outline-none"
+          >
+            <ReportView
+              analysis={data}
+              onOpenClaim={openClaim}
+            />
+          </div>
+        )}
+
+        {activeTab === 'chat' && (
+          <div
+            id="panel-chat"
+            role="tabpanel"
+            aria-labelledby="tab-chat"
+            tabIndex={0}
+            className="focus-visible:outline-none"
+          >
+            <ChatPanel
+              analysis={data}
+              messages={chat.messages}
+              onSendMessage={chat.sendMessage}
+              onRetryTurn={chat.retryTurn}
+              onOpenClaim={openClaim}
+              onSwitchToMatrix={() => switchTab('matrix')}
+              isPending={chat.isPending}
+            />
           </div>
         )}
       </div>

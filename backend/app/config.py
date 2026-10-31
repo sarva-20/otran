@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///backend/data/otran.db"
     OFFLINE_DEMO: bool = False
     CORS_ORIGINS: str = "http://localhost:5173"
+    ORCHESTRATOR: str = "graph"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

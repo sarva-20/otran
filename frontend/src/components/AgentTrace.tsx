@@ -123,6 +123,8 @@ export function AgentTrace({
         className="max-h-[640px] space-y-3 overflow-y-auto rounded-2xl border border-border bg-background/50 p-4"
         tabIndex={0}
         aria-label="Agent trace events feed"
+        aria-live="polite"
+        aria-atomic="false"
       >
         {isLoading && (
           <div className="space-y-3" role="status" aria-label="Connecting to agent stream">

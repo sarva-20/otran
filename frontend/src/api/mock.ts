@@ -481,6 +481,23 @@ function getSynthesizedClaim(claimId: string): Claim | null {
   return claim
 }
 
+const EXTENDED_MOCK_REPORT_MARKDOWN = `# Competitive Intelligence Report
+
+## Summary
+Rivalo cut Pro pricing to $8 [claim:c_002]. We lead on offline mode [claim:c_003]. Nimbus Docs pricing data shows significant internal contradictions [claim:c_007].
+
+## Pricing Analysis
+Acme Notes is positioned at $10 per user per month on the Pro plan [claim:c_001]. Rivalo recently reduced their Pro pricing from $12 to $8 per user per month [claim:c_002], establishing a $2/user/mo price disadvantage for us. Nimbus Docs claims a Team tier at $9/user/month on their marketing page, but standard contract terms cite $14/user/month [claim:c_007].
+
+## Features & Differentiators
+Acme Notes retains a crucial technical differentiator with local offline mode and encrypted workspace sync [claim:c_003]. Rivalo offers parity on enterprise SAML SSO and AI search [claim:c_004]. Meanwhile, Nimbus Docs advertises real-time collaboration and AI search [claim:c_008], though this capability currently lacks validation in public documentation.
+
+## Release Cadence
+Acme Notes ships updates on a monthly release cycle [claim:c_005]. Rivalo maintains an accelerated biweekly shipping cadence [claim:c_006], publishing updates every alternating Wednesday.
+
+## Data Gaps & Recommendations
+Nimbus Docs lacks a public changelog, preventing cadence verification. We recommend leading commercial conversations with our offline security architecture and continuing weekly monitoring of Rivalo's pricing moves.`
+
 export const mockApi: ApiClient = {
   async health() {
     await delay(150)
@@ -558,21 +575,87 @@ export const mockApi: ApiClient = {
   async getReport(id) {
     await delay(400)
     if (!getRun(id).finished) throw new ApiError(404, 'Report not ready yet')
-    return { ...clone(S.report), analysis_id: id }
+    return { ...clone(S.report), analysis_id: id, markdown: EXTENDED_MOCK_REPORT_MARKDOWN }
   },
 
   async getReportMarkdown(id) {
     await delay(200)
     if (!getRun(id).finished) throw new ApiError(404, 'Report not ready yet')
-    return S.report.markdown
+    return EXTENDED_MOCK_REPORT_MARKDOWN
   },
 
   async chat(id, body) {
     await delay(900)
     getRun(id)
-    if (/pric|undercut|cheap|cost|\$/i.test(body.question)) return clone(S.chat_response)
+
+    // Forced error simulation for testing retry
+    if (/force_error|trigger_error/i.test(body.question)) {
+      throw new ApiError(500, 'Simulated model inference failure')
+    }
+
+    // 1. Pricing / undercut / cheap
+    if (/pric|undercut|cheap|cost|\$/i.test(body.question)) {
+      return clone(S.chat_response)
+    }
+
+    // 2. Release cadence / ships fastest
+    if (/cadence|fastest|ship|release/i.test(body.question)) {
+      return {
+        answer: 'Rivalo ships fastest with a biweekly release cycle [claim:c_006], whereas Acme Notes deploys platform updates on a monthly schedule [claim:c_005].',
+        citations: [
+          {
+            claim_id: 'c_006',
+            quote: 'Biweekly Releases: updates shipped every alternating Wednesday.',
+            source_url: 'https://rivalo.example.com/changelog',
+          },
+          {
+            claim_id: 'c_005',
+            quote: 'Platform updates are deployed on the first Tuesday of each month.',
+            source_url: 'https://acmenotes.example.com/changelog',
+          },
+        ],
+        insufficient_evidence: false,
+      }
+    }
+
+    // 3. Offline / lead / strength
+    if (/offline|lead|strength|moat|advantage/i.test(body.question)) {
+      return {
+        answer: 'We lead on offline mode with encrypted local sync [claim:c_003], which is absent in competitor offerings. Rivalo matches us on AI workspace search and SAML SSO [claim:c_004].',
+        citations: [
+          {
+            claim_id: 'c_003',
+            quote: 'Offline mode with local sync, semantic AI search across notebooks, and enterprise SSO.',
+            source_url: 'https://acmenotes.example.com/features',
+          },
+          {
+            claim_id: 'c_004',
+            quote: 'AI workspace search and enterprise SAML SSO included on Pro tiers.',
+            source_url: 'https://rivalo.example.com/product',
+          },
+        ],
+        insufficient_evidence: false,
+      }
+    }
+
+    // 4. Contradictions / disagree / Nimbus
+    if (/contradict|disagree|conflict|nimbus/i.test(body.question)) {
+      return {
+        answer: 'Nimbus Docs has conflicting pricing evidence [claim:c_007]. Their public marketing page lists $9/user/month, but contract terms specify $14/user/month.',
+        citations: [
+          {
+            claim_id: 'c_007',
+            quote: 'Team Plan: $9 per user / month billed monthly',
+            source_url: 'https://nimbusdocs.example.com/pricing',
+          },
+        ],
+        insufficient_evidence: false,
+      }
+    }
+
+    // 5. Insufficient evidence fallback
     return {
-      answer: 'I could not find verified claims that answer this question.',
+      answer: 'I could not find verified claims that answer this question based on collected snapshots.',
       citations: [],
       insufficient_evidence: true,
     }

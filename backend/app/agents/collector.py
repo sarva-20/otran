@@ -36,6 +36,7 @@ class Collector:
         self,
         analysis_id: str,
         urls: Mapping[str, Sequence[str]] | Iterable[tuple[str, str]],
+        run_number: int = 1,
     ) -> list[Snapshot]:
         candidates = (
             [(url, kind) for kind, values in urls.items() for url in values]
@@ -45,7 +46,7 @@ class Collector:
         snapshots: list[Snapshot] = []
         for url, source_type in candidates:
             try:
-                snapshot = await self._collect_one(analysis_id, url, source_type)
+                snapshot = await self._collect_one(analysis_id, url, source_type, run_number)
                 if snapshot is not None:
                     snapshots.append(snapshot)
             except Exception as exc:
@@ -59,10 +60,12 @@ class Collector:
                 )
         return snapshots
 
-    async def _collect_one(self, analysis_id: str, url: str, source_type: str) -> Snapshot | None:
+    async def _collect_one(
+        self, analysis_id: str, url: str, source_type: str, run_number: int
+    ) -> Snapshot | None:
         self._emit(analysis_id, "info", f"Fetching {url}", source_type, {"url": url})
         if settings.OFFLINE_DEMO:
-            html = self._load_offline(url, source_type)
+            html = self._load_offline(url, source_type, run_number)
             final_url = url
         else:
             result = await self.fetcher.fetch(url)
@@ -98,9 +101,10 @@ class Collector:
         self._emit(analysis_id, "success", f"Saved snapshot for {final_url}", source_type)
         return snapshot
 
-    def _load_offline(self, url: str, source_type: str) -> str:
+    def _load_offline(self, url: str, source_type: str, run_number: int = 1) -> str:
         domain = urlparse(url).netloc.lower()
-        path = self.seed_root / domain / f"{source_type}.txt"
+        versioned = self.seed_root / domain / f"{source_type}.v2.txt"
+        path = versioned if run_number > 1 and versioned.exists() else self.seed_root / domain / f"{source_type}.txt"
         return path.read_text()
 
     async def _playwright_html(self, url: str) -> str | None:

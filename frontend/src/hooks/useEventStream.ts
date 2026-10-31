@@ -10,6 +10,7 @@ export interface UseEventStreamResult {
   status: StreamStatus
   retrying: boolean
   retry: () => void
+  reset: () => void
 }
 
 export function useEventStream(
@@ -37,6 +38,13 @@ export function useEventStream(
   }, [fallbackAnalysisStatus, status])
 
   const retry = React.useCallback(() => {
+    setStatus('connecting')
+    setRetrying(false)
+    setReconnectCount((c) => c + 1)
+  }, [])
+
+  const reset = React.useCallback(() => {
+    setEvents([])
     setStatus('connecting')
     setRetrying(false)
     setReconnectCount((c) => c + 1)
@@ -88,5 +96,5 @@ export function useEventStream(
     }
   }, [analysisId, qc, reconnectCount])
 
-  return { events, status, retrying, retry }
+  return { events, status, retrying, retry, reset }
 }

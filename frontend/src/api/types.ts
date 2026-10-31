@@ -25,6 +25,8 @@ export type Gap = S['Gap']
 export type Report = S['Report']
 export type ChatRequest = S['ChatRequest']
 export type ChatResponse = S['ChatResponse']
+export type ChatMessage = NonNullable<ChatRequest['history']>[number]
+export type Citation = ChatResponse['citations'][number]
 
 export type EventLevel = AgentEvent['level']
 export type VerificationStatus = Verification['status']

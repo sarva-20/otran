@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.llm.router import LLMRouter
+from app.config import settings
 from app.models.schemas import Claim, Evidence, Snapshot, Verification
 from app.models.tables import ClaimTable
 from app.services.event_bus import AgentEvent, EventBus, event_bus
@@ -45,7 +46,7 @@ class Extractor:
         bus: EventBus | None = None,
     ) -> None:
         self.db = db
-        self.llm = llm or LLMRouter()
+        self.llm = llm or (None if settings.OFFLINE_DEMO else LLMRouter())
         self.bus = bus or event_bus
         self._event_id = 0
 
@@ -55,6 +56,7 @@ class Extractor:
         product_id: str,
         snapshot: Snapshot,
         dimensions: Sequence[str],
+        chunk_size: int = CHUNK_SIZE,
     ) -> list[Claim]:
         self._emit(
             analysis_id,
@@ -63,7 +65,7 @@ class Extractor:
             {"snapshot_id": snapshot.id},
         )
         all_results: list[ExtractedClaim] = []
-        chunks = _chunks(snapshot.text)
+        chunks = _chunks(snapshot.text, chunk_size)
         provider_before = getattr(self.llm, "active_provider", None)
         for chunk_index, chunk in enumerate(chunks):
             cached = get_extraction_cache(
@@ -72,6 +74,19 @@ class Extractor:
             if cached is not None:
                 extracted = ExtractedClaims.model_validate({"claims": cached})
             else:
+                if settings.OFFLINE_DEMO:
+                    extracted = ExtractedClaims(
+                        claims=_offline_claims(chunk, snapshot.source_type, dimensions)
+                    )
+                    save_extraction_cache(
+                        self.db,
+                        snapshot.content_hash,
+                        chunk_index,
+                        PROMPT_VERSION,
+                        [claim.model_dump() for claim in extracted.claims],
+                    )
+                    all_results.extend(extracted.claims)
+                    continue
                 prompt = _build_prompt(snapshot, dimensions, chunk)
                 try:
                     result = await self.llm.generate_json(prompt, ExtractedClaims)
@@ -180,13 +195,13 @@ class Extractor:
         )
 
 
-def _chunks(text: str) -> list[str]:
-    if len(text) <= CHUNK_SIZE:
+def _chunks(text: str, chunk_size: int = CHUNK_SIZE) -> list[str]:
+    if len(text) <= chunk_size:
         return [text]
     chunks: list[str] = []
     start = 0
     while start < len(text):
-        end = min(start + CHUNK_SIZE, len(text))
+        end = min(start + chunk_size, len(text))
         chunks.append(text[start:end])
         if end == len(text):
             break
@@ -237,6 +252,53 @@ def _claim_id(snapshot_id: str, product_id: str, claim: ExtractedClaim) -> str:
     return f"c_{hashlib.sha256(key.encode()).hexdigest()[:12]}"
 
 
+def _offline_claims(
+    text: str, source_type: str | None, dimensions: Sequence[str]
+) -> list[ExtractedClaim]:
+    claims: list[ExtractedClaim] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "$" in line and "pricing" in dimensions:
+            match = re.search(r"(?P<tier>[A-Za-z]+)\s*-\s*\$(?P<price>\d+(?:\.\d+)?)", line)
+            if match:
+                claims.append(
+                    ExtractedClaim(
+                        dimension="pricing",
+                        statement=line,
+                        quote=line,
+                        data={
+                            "tier": match.group("tier"),
+                            "price": float(match.group("price")),
+                            "currency": "USD",
+                            "period": "user/month",
+                            "billing": "annual" if "annual" in line.lower() else "monthly",
+                        },
+                    )
+                )
+                continue
+        if line.lower().startswith("feature:") and "features" in dimensions:
+            statement = line.split(":", 1)[1].strip()
+            claims.append(ExtractedClaim(dimension="features", statement=statement, quote=line))
+            continue
+        if line.lower().startswith("release:") and "release_cadence" in dimensions:
+            date = re.search(r"\d{4}-\d{2}-\d{2}", line)
+            version = re.search(r"\bv\d+(?:\.\d+)+\b", line, re.I)
+            claims.append(
+                ExtractedClaim(
+                    dimension="release_cadence",
+                    statement=line.split(":", 1)[1].strip(),
+                    quote=line,
+                    data={
+                        **({"date": date.group(0)} if date else {}),
+                        **({"version": version.group(0)} if version else {}),
+                    },
+                )
+            )
+    return claims
+
+
 async def extract(
     db: Session,
     analysis_id: str,
@@ -245,7 +307,8 @@ async def extract(
     dimensions: Sequence[str],
     llm: LLMRouter | object | None = None,
     bus: EventBus | None = None,
+    chunk_size: int = CHUNK_SIZE,
 ) -> list[Claim]:
     return await Extractor(db, llm, bus).extract(
-        analysis_id, product_id, snapshot, dimensions
+        analysis_id, product_id, snapshot, dimensions, chunk_size
     )

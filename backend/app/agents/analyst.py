@@ -19,7 +19,7 @@ from app.models.schemas import (
     Product,
     Report,
 )
-from app.models.tables import AnalysisTable, ChangeTable, ClaimTable
+from app.models.tables import AnalysisTable, ChangeTable, ClaimTable, SnapshotTable
 from app.services.event_bus import AgentEvent, EventBus, event_bus
 from app.services.repository import (
     get_report_cache,
@@ -129,7 +129,7 @@ class Analyst:
         return report
 
     def _claims(self, analysis_id: str) -> list[ClaimTable]:
-        return list(
+        claims = list(
             self.db.scalars(
                 select(ClaimTable)
                 .where(ClaimTable.analysis_id == analysis_id)
@@ -137,6 +137,24 @@ class Analyst:
                 .order_by(ClaimTable.product_id, ClaimTable.dimension, ClaimTable.id)
             ).unique()
         )
+        latest_ids = {
+            snapshot.url: snapshot.id
+            for snapshot in self.db.scalars(
+                select(SnapshotTable).order_by(SnapshotTable.captured_at)
+            )
+        }
+        return [
+            claim
+            for claim in claims
+            if any(
+                (
+                    self.db.get(SnapshotTable, evidence.snapshot_id) is None
+                    or self.db.get(SnapshotTable, evidence.snapshot_id).url != evidence.source_url
+                    or latest_ids.get(evidence.source_url) == evidence.snapshot_id
+                )
+                for evidence in claim.evidence
+            )
+        ]
 
     async def _generate_draft(self, payload: dict[str, Any], valid_ids: set[str]) -> ReportDraft:
         if self.llm is None:

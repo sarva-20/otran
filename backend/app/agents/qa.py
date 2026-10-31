@@ -97,7 +97,14 @@ class QAAgent:
             except Exception:
                 draft = None
         if draft is None:
-            draft = _fallback_draft(claims, question)
+            draft = _fallback_draft(
+                claims,
+                question,
+                {
+                    product.id: product.name
+                    for product in analysis.products
+                },
+            )
         valid_ids = set(claim_ids)
         cited_ids = [claim_id for claim_id in draft.citation_claim_ids if claim_id in valid_ids]
         if not cited_ids:
@@ -187,15 +194,40 @@ class QAAgent:
         self.db.commit()
 
 
-def _fallback_draft(claims: Sequence[ClaimTable], question: str) -> QADraft:
-    if not claims:
+def _fallback_draft(
+    claims: Sequence[ClaimTable],
+    question: str,
+    product_names: dict[str, str] | None = None,
+) -> QADraft:
+    question_tokens = set(_TOKEN_RE.findall(question.lower()))
+    relevant_dimensions = {
+        "pricing"
+        for token in question_tokens
+        if token in {"price", "pricing", "cost", "costs", "plan", "plans"}
+    }
+    if question_tokens & {"release", "releases", "cadence", "changelog", "recent", "changed"}:
+        relevant_dimensions.add("release_cadence")
+    requested_products = {
+        product_id
+        for product_id, name in (product_names or {}).items()
+        if _TOKEN_RE.findall(name.lower()) and set(_TOKEN_RE.findall(name.lower())) & question_tokens
+    }
+    matching = [
+        claim
+        for claim in claims
+        if claim.dimension in relevant_dimensions
+        or question_tokens & set(_TOKEN_RE.findall(claim.statement.lower()))
+    ]
+    if requested_products:
+        matching = [claim for claim in matching if claim.product_id in requested_products]
+    if not matching:
         return QADraft(
             answer=f"I don't have verified claims that answer: {question}",
             insufficient_evidence=True,
         )
     return QADraft(
-        answer="\n".join(f"- {claim.statement}" for claim in claims[:5]),
-        citation_claim_ids=[claim.id for claim in claims[:5]],
+        answer="\n".join(f"- {claim.statement}" for claim in matching[:5]),
+        citation_claim_ids=[claim.id for claim in matching[:5]],
         insufficient_evidence=False,
     )
 

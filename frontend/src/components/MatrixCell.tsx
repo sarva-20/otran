@@ -53,20 +53,21 @@ export function MatrixCellComponent({
   onOpenClaim,
   className,
 }: MatrixCellProps) {
-  const isMissing = cell.verification_status === 'missing' || cell.claim_ids.length === 0
+  const claimIds = cell.claim_ids ?? []
+  const isMissing = cell.verification_status === 'missing' || claimIds.length === 0
   const isContradicted = cell.verification_status === 'contradicted'
-  const firstClaimId = cell.claim_ids[0]
+  const firstClaimId = claimIds[0]
 
   const handleClick = () => {
     if (isMissing || !firstClaimId || !onOpenClaim) return
-    onOpenClaim(firstClaimId, cell.claim_ids)
+    onOpenClaim(firstClaimId, claimIds)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isMissing || !firstClaimId || !onOpenClaim) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
-      onOpenClaim(firstClaimId, cell.claim_ids)
+      onOpenClaim(firstClaimId, claimIds)
     }
   }
 
@@ -115,9 +116,9 @@ export function MatrixCellComponent({
       <div className="flex flex-wrap items-center justify-between gap-1.5 pt-3 border-t border-border/40">
         <StatusIcon status={cell.verification_status} />
         <div className="flex items-center gap-1.5">
-          {cell.claim_ids.length > 1 && (
-            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" title={`${cell.claim_ids.length} claims recorded`}>
-              {cell.claim_ids.length} claims
+          {claimIds.length > 1 && (
+            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" title={`${claimIds.length} claims recorded`}>
+              {claimIds.length} claims
             </span>
           )}
           <ConfidenceBadge confidence={cell.confidence} />

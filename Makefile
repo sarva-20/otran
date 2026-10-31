@@ -15,3 +15,9 @@ demo:
 	@echo "Starting Otran demo server..."
 	@echo "curl -X POST http://127.0.0.1:8000/api/analyses -H 'content-type: application/json' -d '{\"our_product\":{\"name\":\"Our product\",\"url\":\"https://example.com\"},\"competitors\":[{\"name\":\"Competitor\",\"url\":\"https://example.org\"}]}'"
 	. .venv/bin/activate && OFFLINE_DEMO=true uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+
+demo-seed:
+	. .venv/bin/activate && OFFLINE_DEMO=true PYTHONPATH=backend python scripts/demo_seed.py
+
+export-cache:
+	. .venv/bin/activate && PYTHONPATH=backend python scripts/export_llm_cache.py

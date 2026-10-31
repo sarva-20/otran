@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,10 +13,13 @@ from app.agents.extractor import Extractor
 from app.agents.analyst import Analyst
 from app.agents.verifier import Verifier
 from app.collectors.fetcher import Fetcher
+from app.config import settings
 from app.llm.router import LLMRouter
 from app.models.schemas import Snapshot
 from app.models.tables import AnalysisTable, ClaimTable, EventTable, ProductTable, SnapshotTable
 from app.services.event_bus import AgentEvent, EventBus, event_bus
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -28,7 +32,7 @@ class Orchestrator:
     ) -> None:
         self.db = db
         self.fetcher = fetcher or Fetcher()
-        self.llm = llm or LLMRouter()
+        self.llm = llm if llm is not None else (None if settings.OFFLINE_DEMO else LLMRouter())
         self.bus = bus or event_bus
         self._event_id = 0
 
@@ -49,13 +53,23 @@ class Orchestrator:
             async with semaphore:
                 try:
                     self._emit(analysis_id, "info", f"Starting product {product.name}", {"product_id": product.id})
-                    discovered = await Discovery(self.fetcher).discover(product.url, product.extra_urls)
-                    snapshots = await Collector(self.db, self.fetcher, self.bus).collect(analysis_id, discovered)
+                    if settings.OFFLINE_DEMO:
+                        discovered = {
+                            source_type: [f"{product.url.rstrip('/')}/{source_type}"]
+                            for source_type in ("pricing", "product_page", "release_notes")
+                        }
+                    else:
+                        discovered = await Discovery(self.fetcher).discover(product.url, product.extra_urls)
+                    snapshots = await Collector(self.db, self.fetcher, self.bus).collect(
+                        analysis_id, discovered, run_number=analysis.run_number or 1
+                    )
+                    logger.info("provider=%s stage=collector product=%s", self._provider(), product.name)
                     for snapshot in snapshots:
                         results.append(snapshot)
                         await Extractor(self.db, self.llm, self.bus).extract(
                             analysis_id, product.id, snapshot, analysis.dimensions
                         )
+                    logger.info("provider=%s stage=extractor product=%s", self._provider(), product.name)
                     self._emit(analysis_id, "success", f"Finished product {product.name}", {"product_id": product.id})
                 except Exception as exc:
                     failures += 1
@@ -68,6 +82,7 @@ class Orchestrator:
 
         await asyncio.gather(*(run_product(product) for product in products))
         await Verifier(self.db, self.llm, self.bus).verify(analysis_id)
+        logger.info("provider=%s stage=verifier analysis=%s", self._provider(), analysis_id)
         changes = []
         if rerun:
             changes = await DiffAgent(self.db, self.llm, self.bus).diff(
@@ -76,6 +91,7 @@ class Orchestrator:
                 results,
             )
         await Analyst(self.db, self.llm, self.bus).build_report(analysis_id)
+        logger.info("provider=%s stage=analyst analysis=%s", self._provider(), analysis_id)
         usable = bool(results or self.db.scalar(select(ClaimTable).where(ClaimTable.analysis_id == analysis_id)))
         self._update_status(analysis, "completed" if usable else "failed")
         self._update_stats(analysis, len(results), len(changes))
@@ -165,6 +181,9 @@ class Orchestrator:
     def _emit_done(self, analysis_id: str, status: str) -> None:
         self._emit(analysis_id, "success" if status == "completed" else "error", "done", {"status": status})
 
+    def _provider(self) -> str:
+        return getattr(self.llm, "active_provider", "template/offline")
+
 
 async def run_analysis(
     analysis_id: str,
@@ -179,7 +198,16 @@ async def run_analysis(
 
         db = SessionLocal()
         try:
-            await Orchestrator(db, fetcher, llm, bus).run_analysis(analysis_id, rerun)
+            if settings.ORCHESTRATOR == "legacy":
+                await Orchestrator(db, fetcher, llm, bus).run_analysis(analysis_id, rerun)
+                return
+            try:
+                from app.agents.graph import run_graph
+
+                await run_graph(db, analysis_id, rerun, fetcher, llm, bus)
+            except Exception:
+                logger.exception("Graph orchestration failed; falling back to legacy")
+                await Orchestrator(db, fetcher, llm, bus).run_analysis(analysis_id, rerun)
         finally:
             db.close()
         return

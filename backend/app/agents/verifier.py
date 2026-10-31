@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.llm.router import LLMRouter
+from app.config import settings
 from app.models.schemas import Verification
 from app.models.tables import ClaimTable, SnapshotTable
 from app.services.event_bus import AgentEvent, EventBus, event_bus
@@ -34,6 +35,32 @@ class SemanticResults(BaseModel):
     results: list[SemanticResult] = Field(default_factory=list)
 
 
+def _offline_semantics(group: Sequence[ClaimTable]) -> dict[str, SemanticResult]:
+    results: dict[str, SemanticResult] = {}
+    for claim in group:
+        results[claim.id] = SemanticResult(claim_id=claim.id, supports=True)
+    for index, left in enumerate(group):
+        for right in group[index + 1 :]:
+            left_data = left.data or {}
+            right_data = right.data or {}
+            same_tier = left_data.get("tier") == right_data.get("tier")
+            different_price = left_data.get("price") != right_data.get("price")
+            if same_tier and left_data.get("price") is not None and different_price:
+                results[left.id] = SemanticResult(
+                    claim_id=left.id,
+                    supports=True,
+                    contradicts_claim_id=right.id,
+                    note="Different prices for the same tier.",
+                )
+                results[right.id] = SemanticResult(
+                    claim_id=right.id,
+                    supports=True,
+                    contradicts_claim_id=left.id,
+                    note="Different prices for the same tier.",
+                )
+    return results
+
+
 class Verifier:
     def __init__(
         self,
@@ -55,6 +82,24 @@ class Verifier:
                 .order_by(ClaimTable.product_id, ClaimTable.dimension, ClaimTable.id)
             ).unique()
         )
+        latest_ids = {
+            snapshot.url: snapshot.id
+            for snapshot in self.db.scalars(
+                select(SnapshotTable).order_by(SnapshotTable.captured_at)
+            )
+        }
+        claims = [
+            claim
+            for claim in claims
+            if any(
+                (
+                    self.db.get(SnapshotTable, evidence.snapshot_id) is None
+                    or self.db.get(SnapshotTable, evidence.snapshot_id).url != evidence.source_url
+                    or latest_ids.get(evidence.source_url) == evidence.snapshot_id
+                )
+                for evidence in claim.evidence
+            )
+        ]
         groups: dict[tuple[str, str], list[ClaimTable]] = defaultdict(list)
         for claim in claims:
             groups[(claim.product_id, claim.dimension)].append(claim)
@@ -126,6 +171,8 @@ class Verifier:
         ]
         if len(group) == 1 and len(exact_structured) == 1:
             return {}
+        if settings.OFFLINE_DEMO:
+            return _offline_semantics(group)
         payload = [
             {
                 "claim_id": claim.id,
@@ -145,10 +192,13 @@ class Verifier:
                 "its quote supports it. Identify contradictions by claim id. Return one result "
                 "per claim.\n" + json.dumps(payload)
             )
-            response = await self.llm.generate_json(prompt, SemanticResults)
-            parsed = SemanticResults.model_validate(response)
-            raw = [item.model_dump() for item in parsed.results]
-            save_verification_cache(self.db, cache_key, PROMPT_VERSION, raw)
+            try:
+                response = await self.llm.generate_json(prompt, SemanticResults)
+                parsed = SemanticResults.model_validate(response)
+                raw = [item.model_dump() for item in parsed.results]
+                save_verification_cache(self.db, cache_key, PROMPT_VERSION, raw)
+            except Exception:
+                return {}
         else:
             parsed = SemanticResults.model_validate({"results": cached})
         return {result.claim_id: result for result in parsed.results}

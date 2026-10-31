@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.analyst import Analyst
 from app.agents.collector import Collector
-from app.agents.discovery import Discovery
+from app.agents.discovery import Discovery, offline_discover
 from app.agents.diff import DiffAgent
 from app.agents.extractor import Extractor
 from app.agents.verifier import Verifier
@@ -125,10 +125,11 @@ class GraphOrchestrator:
                 return {"errors": [f"Unknown product {state['product_id']}"]}
             try:
                 if settings.OFFLINE_DEMO:
-                    discovered = {
-                        source_type: [f"{product.url.rstrip('/')}/{source_type}"]
-                        for source_type in ("pricing", "product_page", "release_notes")
-                    }
+                    discovered = offline_discover(
+                        product.url,
+                        product.extra_urls,
+                        Collector(self.db).seed_root,
+                    )
                 else:
                     discovered = await Discovery(self.fetcher).discover(product.url, product.extra_urls)
                     if not any(discovered.get(kind) for kind in ("pricing", "docs", "release_notes")):

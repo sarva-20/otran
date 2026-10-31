@@ -50,11 +50,19 @@ class Collector:
                 if snapshot is not None:
                     snapshots.append(snapshot)
             except Exception as exc:
-                logger.exception("Collection failed for %s", url)
+                message = (
+                    f"OFFLINE_DEMO is on and no seed file exists for {url}"
+                    if settings.OFFLINE_DEMO and isinstance(exc, FileNotFoundError)
+                    else f"Failed to collect {url}: {exc}"
+                )
+                if settings.OFFLINE_DEMO and isinstance(exc, FileNotFoundError):
+                    logger.error(message)
+                else:
+                    logger.exception("Collection failed for %s", url)
                 self._emit(
                     analysis_id,
                     "error",
-                    f"Failed to collect {url}: {exc}",
+                    message,
                     source_type=source_type,
                     data={"url": url},
                 )
@@ -71,6 +79,8 @@ class Collector:
             result = await self.fetcher.fetch(url)
             html, final_url = result.html, result.final_url
         text = clean_html(html)
+        if not text.strip():
+            raise RuntimeError(f"empty text from {url}")
         if len(text) < 500 and not settings.OFFLINE_DEMO and isinstance(self.fetcher, Fetcher):
             fallback_html = await self._playwright_html(final_url)
             if fallback_html:

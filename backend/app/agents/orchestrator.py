@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.collector import Collector
-from app.agents.discovery import Discovery
+from app.agents.discovery import Discovery, offline_discover
 from app.agents.diff import DiffAgent
 from app.agents.extractor import Extractor
 from app.agents.analyst import Analyst
@@ -54,10 +54,11 @@ class Orchestrator:
                 try:
                     self._emit(analysis_id, "info", f"Starting product {product.name}", {"product_id": product.id})
                     if settings.OFFLINE_DEMO:
-                        discovered = {
-                            source_type: [f"{product.url.rstrip('/')}/{source_type}"]
-                            for source_type in ("pricing", "product_page", "release_notes")
-                        }
+                        discovered = offline_discover(
+                            product.url,
+                            product.extra_urls,
+                            Collector(self.db).seed_root,
+                        )
                     else:
                         discovered = await Discovery(self.fetcher).discover(product.url, product.extra_urls)
                     snapshots = await Collector(self.db, self.fetcher, self.bus).collect(

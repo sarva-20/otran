@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
 from urllib.parse import urljoin, urlparse
+from pathlib import Path
 
 from selectolax.parser import HTMLParser
 
@@ -16,6 +17,27 @@ COMMON_PATHS = {
     "docs": "/docs",
     "release_notes": "/changelog",
 }
+
+
+def offline_discover(
+    homepage_url: str,
+    extra_urls: Sequence[str] | None,
+    seed_root: Path,
+) -> dict[str, list[str]]:
+    candidates: dict[str, list[str]] = {kind: [] for kind in SOURCE_TYPES}
+    for url in extra_urls or []:
+        kind, _ = Discovery._classify(url, "")
+        candidates[kind].append(url)
+    candidates["product_page"].append(homepage_url)
+    domain = urlparse(homepage_url).netloc.lower()
+    for source_type in SOURCE_TYPES:
+        if candidates[source_type]:
+            continue
+        base = seed_root / domain / f"{source_type}.txt"
+        versioned = seed_root / domain / f"{source_type}.v2.txt"
+        if base.exists() or versioned.exists():
+            candidates[source_type].append(f"{homepage_url.rstrip('/')}/{source_type}")
+    return candidates
 
 
 class Discovery:
@@ -50,7 +72,8 @@ class Discovery:
                 self._add(candidates, (kind, score), url, score)
 
         for kind, path in COMMON_PATHS.items():
-            self._add(candidates, (kind, 1), urljoin(homepage_url, path), 1)
+            if not candidates[kind]:
+                self._add(candidates, (kind, 1), urljoin(homepage_url, path), 1)
         return {
             kind: [url for _, url in sorted(values, key=lambda item: (-item[0], item[1]))[:2]]
             for kind, values in candidates.items()

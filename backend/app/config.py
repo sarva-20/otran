@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     OFFLINE_DEMO: bool = False
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     ORCHESTRATOR: str = "graph"
+    LLM_FALLBACK: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

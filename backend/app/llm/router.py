@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
+import httpx
 
 from pydantic import BaseModel
 
@@ -24,6 +25,7 @@ class LLMRouter:
         self._active_provider = "gemini"
         self._retry_attempts = retry_attempts
         self._sleep = sleep
+        self._fallback_enabled = settings.LLM_FALLBACK
 
     @property
     def active_provider(self) -> str:
@@ -52,9 +54,32 @@ class LLMRouter:
                     break
                 await self._sleep(0.25 * (2**attempt))
 
+        if not self._fallback_enabled:
+            raise RuntimeError("Gemini rate limit reached and LLM_FALLBACK=false")
         self._active_provider = "ollama"
         logger.warning("Gemini rate limit reached; switching to Ollama")
         return await self.ollama.generate_json(prompt, schema, system)
+
+    def disable_fallback(self) -> None:
+        self._fallback_enabled = False
+
+    async def validate_fallback(self) -> bool:
+        if not self._fallback_enabled:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/tags")
+                response.raise_for_status()
+            models = {item.get("name") for item in response.json().get("models", [])}
+            available = settings.OLLAMA_MODEL in models
+            if not available:
+                self.disable_fallback()
+                logger.warning("Ollama fallback disabled: model %s is not installed", settings.OLLAMA_MODEL)
+            return available
+        except Exception as exc:
+            self.disable_fallback()
+            logger.warning("Ollama fallback disabled: %s", exc)
+            return False
 
 
 def _is_rate_limit(error: Exception) -> bool:
